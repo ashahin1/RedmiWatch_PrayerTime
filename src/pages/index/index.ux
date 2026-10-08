@@ -1,0 +1,427 @@
+<template>
+  <div class="page">
+    <scroll class="scroll-container" scroll-y="true">
+      <!-- 1. Header: Date, City, Time -->
+      <div class="header-box">
+        <text class="hijri-text">{{ hijriDateStr }}</text>
+        <text class="location-badge">{{ cityName }}</text>
+      </div>
+
+      <!-- 2. Hero Next Prayer Card -->
+      <div class="hero-card">
+        <div class="hero-header">
+          <text class="hero-label">NEXT PRAYER</text>
+          <text class="hero-prayer-time">{{ nextPrayerTime }}</text>
+        </div>
+        <text class="hero-prayer-name">{{ nextPrayerName }}</text>
+        <div class="countdown-row">
+          <text class="countdown-label">in</text>
+          <text class="countdown-timer">{{ countdownText }}</text>
+        </div>
+        <!-- Progress Bar -->
+        <div class="progress-track">
+          <div class="progress-fill" style="width: {{ progressWidth }}px;"></div>
+        </div>
+      </div>
+
+      <!-- 3. Section Title -->
+      <div class="section-box">
+        <text class="section-title">TODAY'S SCHEDULE</text>
+      </div>
+
+      <!-- 4. Prayer Times List Items -->
+      <div for="{{ prayerList }}" class="prayer-row {{ $item.isActive ? 'active-row' : '' }}">
+        <div class="prayer-left">
+          <div class="active-dot {{ $item.isActive ? 'dot-visible' : 'dot-hidden' }}"></div>
+          <text class="prayer-name {{ $item.isActive ? 'active-text' : '' }}">{{ $item.name }}</text>
+        </div>
+        <text class="prayer-time {{ $item.isActive ? 'active-text' : '' }}">{{ $item.timeStr }}</text>
+      </div>
+
+      <!-- 5. Action Buttons -->
+      <div class="action-grid">
+        <div class="action-btn qibla-btn" onclick="openQibla">
+          <text class="btn-text">🧭 Qibla</text>
+        </div>
+        <div class="action-btn settings-btn" onclick="openSettings">
+          <text class="btn-text">⚙ Settings</text>
+        </div>
+      </div>
+
+      <div class="footer-spacing">
+        <text class="footer-note">Xiaomi Vela • Redmi Watch 6</text>
+      </div>
+    </scroll>
+  </div>
+</template>
+
+<script>
+import router from '@system.router';
+import vibrator from '@system.vibrator';
+import { PrayerEngine } from '../../common/prayer-engine.js';
+import { getHijriDate } from '../../common/hijri.js';
+import { loadSettings, DEFAULT_SETTINGS } from '../../common/storage.js';
+
+export default {
+  data: {
+    cityName: 'Riyadh',
+    hijriDateStr: '',
+    nextPrayerName: '--',
+    nextPrayerTime: '--:--',
+    countdownText: '00:00:00',
+    progressWidth: 0,
+    prayerList: [],
+    timerId: null,
+    settings: null,
+    schedule: null,
+    lastAlertedPrayer: ''
+  },
+
+  onInit() {
+    console.log('[PrayerApp] index.ux onInit starting');
+    this.initSynchronousData();
+    this.refreshAll();
+  },
+
+  onShow() {
+    console.log('[PrayerApp] index.ux onShow');
+    this.refreshAll();
+    this.startTicker();
+  },
+
+  onHide() {
+    this.stopTicker();
+  },
+
+  onDestroy() {
+    this.stopTicker();
+  },
+
+  initSynchronousData() {
+    if (!this.settings) {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    }
+    this.computeAndApplySchedule();
+  },
+
+  async refreshAll() {
+    try {
+      const loaded = await loadSettings();
+      if (loaded) {
+        this.settings = loaded;
+      }
+    } catch (e) {
+      console.log('[PrayerApp] loadSettings error:', e);
+    }
+    this.computeAndApplySchedule();
+  },
+
+  computeAndApplySchedule() {
+    if (!this.settings) return;
+    this.cityName = this.settings.cityName || 'Riyadh';
+
+    const now = new Date();
+    const hijri = getHijriDate(now, this.settings.hijriAdjustment || 0);
+    this.hijriDateStr = hijri.formattedEn;
+
+    const engine = new PrayerEngine({
+      method: this.settings.method,
+      asrRule: this.settings.asrRule,
+      highLatitudeRule: this.settings.highLatitudeRule,
+      offsets: this.settings.offsets,
+      });
+
+    this.schedule = engine.calculate(
+      now,
+      this.settings.latitude,
+      this.settings.longitude
+    );
+
+    this.updateTick();
+  },
+
+  startTicker() {
+    this.stopTicker();
+    this.timerId = setInterval(() => {
+      this.updateTick();
+    }, 1000);
+  },
+
+  stopTicker() {
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+  },
+
+  updateTick() {
+    if (!this.schedule || !this.settings) return;
+
+    const now = new Date();
+    const engine = new PrayerEngine({
+      method: this.settings.method,
+      asrRule: this.settings.asrRule,
+      highLatitudeRule: this.settings.highLatitudeRule,
+      offsets: this.settings.offsets,
+      });
+
+    const info = engine.getNextPrayer(this.schedule, now);
+
+    this.nextPrayerName = info.nextPrayer.name;
+    this.nextPrayerTime = info.nextPrayer.time.timeStr;
+    this.countdownText = info.countdownStr;
+
+    // Progress bar width (max 330px inside 370px card)
+    const maxWidth = 330;
+    this.progressWidth = Math.round((info.progressPercent / 100) * maxWidth);
+
+    // Build timeline list
+    const activeKey = info.currentPrayer ? info.currentPrayer.key : '';
+    this.prayerList = [
+      { key: 'fajr', name: 'Fajr', timeStr: this.schedule.fajr.timeStr, isActive: activeKey === 'fajr' },
+      { key: 'sunrise', name: 'Sunrise', timeStr: this.schedule.sunrise.timeStr, isActive: activeKey === 'sunrise' },
+      { key: 'dhuhr', name: 'Dhuhr', timeStr: this.schedule.dhuhr.timeStr, isActive: activeKey === 'dhuhr' },
+      { key: 'asr', name: 'Asr', timeStr: this.schedule.asr.timeStr, isActive: activeKey === 'asr' },
+      { key: 'maghrib', name: 'Maghrib', timeStr: this.schedule.maghrib.timeStr, isActive: activeKey === 'maghrib' },
+      { key: 'isha', name: 'Isha', timeStr: this.schedule.isha.timeStr, isActive: activeKey === 'isha' }
+    ];
+
+    // Check if prayer time arrived (countdown reached 0)
+    if (info.totalDiffSec === 0 && this.lastAlertedPrayer !== info.nextPrayer.key) {
+      this.lastAlertedPrayer = info.nextPrayer.key;
+      if (this.settings.vibrateOnAdhan) {
+        try {
+          vibrator.vibrate({ mode: 'long' });
+        } catch (e) {}
+      }
+    }
+  },
+
+  openQibla() {
+    router.push({
+      uri: '/pages/qibla'
+    });
+  },
+
+  openSettings() {
+    router.push({
+      uri: '/pages/settings'
+    });
+  }
+};
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  background-color: #000000;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+}
+
+.scroll-container {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  padding-left: 36px;
+  padding-right: 36px;
+  padding-top: 40px;
+}
+
+/* Header */
+.header-box {
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  padding-bottom: 14px;
+}
+
+.hijri-text {
+  font-size: 22px;
+  color: #9CA3AF;
+}
+
+.location-badge {
+  font-size: 22px;
+  color: #34D399;
+}
+
+/* Hero Next Prayer Card */
+.hero-card {
+  width: 100%;
+  background-color: #111827;
+  border: 2px solid #1F2937;
+  border-radius: 24px;
+  padding: 18px;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+
+.hero-header {
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hero-label {
+  font-size: 20px;
+  color: #10B981;
+  font-weight: bold;
+}
+
+.hero-prayer-time {
+  font-size: 28px;
+  color: #E5E7EB;
+  font-weight: bold;
+}
+
+.hero-prayer-name {
+  font-size: 46px;
+  color: #FFFFFF;
+  font-weight: bold;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.countdown-row {
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.countdown-label {
+  font-size: 22px;
+  color: #9CA3AF;
+  margin-right: 8px;
+}
+
+.countdown-timer {
+  font-size: 32px;
+  color: #34D399;
+  font-weight: bold;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background-color: #374151;
+  border-radius: 4px;
+}
+
+.progress-fill {
+  height: 8px;
+  background-color: #10B981;
+  border-radius: 4px;
+}
+
+/* Section Title */
+.section-box {
+  width: 100%;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.section-title {
+  font-size: 20px;
+  color: #6B7280;
+  font-weight: bold;
+}
+
+/* Prayer Rows */
+.prayer-row {
+  width: 100%;
+  padding-left: 18px;
+  padding-right: 18px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  margin-bottom: 8px;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 16px;
+  background-color: #0F172A;
+  border: 1px solid #1E293B;
+}
+
+.active-row {
+  background-color: #064E3B;
+  border: 2px solid #10B981;
+}
+
+.prayer-left {
+  align-items: center;
+}
+
+.active-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  margin-right: 12px;
+}
+
+.dot-visible {
+  background-color: #34D399;
+}
+
+.dot-hidden {
+  background-color: transparent;
+}
+
+.prayer-name {
+  font-size: 26px;
+  color: #D1D5DB;
+}
+
+.prayer-time {
+  font-size: 26px;
+  color: #F3F4F6;
+  font-weight: bold;
+}
+
+.active-text {
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+/* Action Buttons */
+.action-grid {
+  width: 100%;
+  justify-content: space-between;
+  margin-top: 16px;
+  margin-bottom: 14px;
+}
+
+.action-btn {
+  width: 48%;
+  height: 64px;
+  border-radius: 20px;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #374151;
+}
+
+.qibla-btn {
+  background-color: #1E3A5F;
+}
+
+.settings-btn {
+  background-color: #1F2937;
+}
+
+.btn-text {
+  font-size: 24px;
+  color: #FFFFFF;
+}
+
+.footer-spacing {
+  width: 100%;
+  justify-content: center;
+  padding-top: 16px;
+  padding-bottom: 60px;
+}
+
+.footer-note {
+  font-size: 18px;
+  color: #4B5563;
+}
+</style>
