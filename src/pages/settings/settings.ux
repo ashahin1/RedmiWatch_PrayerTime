@@ -15,11 +15,14 @@
 
       <div class="card">
         <div class="card-header">
-          <text class="card-title">Current: {{ currentCityName }}</text>
+          <text class="card-title">Active: {{ currentCityName }}</text>
         </div>
         <text class="card-subtitle">{{ currentCoords }}</text>
         <div class="gps-btn" onclick="acquireGps">
           <text class="gps-btn-text">{{ gpsBtnText }}</text>
+        </div>
+        <div class="saved-gps-btn" if="{{ hasSavedGps && !isCurrentlyUsingGps }}" onclick="useSavedGps">
+          <text class="saved-gps-text">📍 Use Saved GPS ({{ savedGpsCoords }})</text>
         </div>
         <text class="gps-status" if="{{ gpsStatusMsg }}">{{ gpsStatusMsg }}</text>
       </div>
@@ -100,6 +103,9 @@ export default {
     currentCoords: '24.71° N, 46.68° E',
     gpsBtnText: '📡 Sync Current GPS Location',
     gpsStatusMsg: '',
+    hasSavedGps: false,
+    savedGpsCoords: '',
+    isCurrentlyUsingGps: false,
     vibrateOnAdhan: true,
     cityList: [],
     methodList: [],
@@ -132,8 +138,24 @@ export default {
   updateLists() {
     if (!this.settings) return;
     this.currentCityName = this.settings.cityName || 'Riyadh';
-    this.currentCoords = `${this.settings.latitude.toFixed(2)}° N, ${this.settings.longitude.toFixed(2)}° E`;
+    const lat = typeof this.settings.latitude === 'number' ? this.settings.latitude : 24.7136;
+    const lon = typeof this.settings.longitude === 'number' ? this.settings.longitude : 46.6753;
+    const latH = lat >= 0 ? 'N' : 'S';
+    const lonH = lon >= 0 ? 'E' : 'W';
+    this.currentCoords = `${Math.abs(lat).toFixed(2)}° ${latH}, ${Math.abs(lon).toFixed(2)}° ${lonH}`;
     this.vibrateOnAdhan = !!this.settings.vibrateOnAdhan;
+
+    const isGpsMode = this.settings.locationMode === 'gps' || this.settings.cityName === 'Current Location (GPS)';
+    this.isCurrentlyUsingGps = isGpsMode;
+    this.hasSavedGps = !!(this.settings.hasSavedGps && typeof this.settings.savedGpsLat === 'number');
+
+    if (this.hasSavedGps) {
+      const gLat = this.settings.savedGpsLat;
+      const gLon = this.settings.savedGpsLon;
+      const gLatH = gLat >= 0 ? 'N' : 'S';
+      const gLonH = gLon >= 0 ? 'E' : 'W';
+      this.savedGpsCoords = `${Math.abs(gLat).toFixed(2)}° ${gLatH}, ${Math.abs(gLon).toFixed(2)}° ${gLonH}`;
+    }
 
     // Build time format options
     const timeFormats = [
@@ -145,10 +167,10 @@ export default {
       isSelected: tf.key === (this.settings.timeFormat || '12h')
     }));
 
-    // Build city options
+    // Build city options: only marked selected if NOT in GPS mode
     this.cityList = CITIES.map(c => ({
       ...c,
-      isSelected: (c.name.toLowerCase() === this.currentCityName.toLowerCase() || c.id === this.settings.selectedCityId)
+      isSelected: !isGpsMode && (c.id === this.settings.selectedCityId || c.name.toLowerCase() === this.currentCityName.toLowerCase())
     }));
 
     // Build calculation method options
@@ -204,6 +226,25 @@ export default {
     } catch (e) {}
   },
 
+  async useSavedGps() {
+    if (!this.settings || !this.settings.hasSavedGps) return;
+    this.settings.latitude = this.settings.savedGpsLat;
+    this.settings.longitude = this.settings.savedGpsLon;
+    this.settings.timezone = this.settings.savedGpsTimezone !== undefined
+      ? this.settings.savedGpsTimezone
+      : Math.round(this.settings.savedGpsLon / 15.0);
+    this.settings.cityName = 'Current Location (GPS)';
+    this.settings.selectedCityId = 'gps';
+    this.settings.locationMode = 'gps';
+
+    await saveSettings(this.settings);
+    this.updateLists();
+
+    try {
+      vibrator.vibrate({ mode: 'short' });
+    } catch (e) {}
+  },
+
   async selectMethod(methodKey) {
     this.settings.method = methodKey;
     await saveSettings(this.settings);
@@ -245,8 +286,15 @@ export default {
           this.settings.latitude = data.latitude;
           this.settings.longitude = data.longitude;
           this.settings.timezone = Math.round(data.longitude / 15.0);
-          this.settings.cityName = 'GPS Location';
-          this.settings.locationMode = 'auto';
+          this.settings.cityName = 'Current Location (GPS)';
+          this.settings.locationMode = 'gps';
+          this.settings.selectedCityId = 'gps';
+
+          // Persist the locked GPS location for later use
+          this.settings.hasSavedGps = true;
+          this.settings.savedGpsLat = data.latitude;
+          this.settings.savedGpsLon = data.longitude;
+          this.settings.savedGpsTimezone = this.settings.timezone;
 
           await saveSettings(this.settings);
           this.gpsBtnText = '📡 Sync Current GPS Location';
@@ -259,7 +307,7 @@ export default {
         },
         fail: (data, code) => {
           this.gpsBtnText = '📡 Sync Current GPS Location';
-          this.gpsStatusMsg = `GPS unavailable (${code}). Using preset.`;
+          this.gpsStatusMsg = `GPS signal unavailable (${code}). Using preset.`;
         },
         complete: () => {}
       });
@@ -361,6 +409,23 @@ export default {
 .gps-btn-text {
   color: #FFFFFF;
   font-size: 22px;
+  font-weight: bold;
+}
+
+.saved-gps-btn {
+  width: 100%;
+  height: 52px;
+  border-radius: 16px;
+  background-color: #1E3A5F;
+  border: 1px solid #3B82F6;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.saved-gps-text {
+  color: #93C5FD;
+  font-size: 20px;
   font-weight: bold;
 }
 

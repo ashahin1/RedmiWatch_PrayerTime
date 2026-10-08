@@ -74,7 +74,8 @@ export default {
     timerId: null,
     settings: null,
     schedule: null,
-    lastAlertedPrayer: ''
+    lastAlertedPrayer: '',
+    lastCalculatedDate: null
   },
 
   onInit() {
@@ -121,6 +122,7 @@ export default {
     this.cityName = this.settings.cityName || 'Riyadh';
 
     const now = new Date();
+    this.lastCalculatedDate = now.getDate();
     const hijri = getHijriDate(now, this.settings.hijriAdjustment || 0);
     this.hijriDateStr = hijri.formattedEn;
 
@@ -167,6 +169,11 @@ export default {
     if (!this.schedule || !this.settings) return;
 
     const now = new Date();
+    if (this.lastCalculatedDate !== null && now.getDate() !== this.lastCalculatedDate) {
+      this.computeAndApplySchedule();
+      return;
+    }
+
     const engine = new PrayerEngine({
       method: this.settings.method,
       asrRule: this.settings.asrRule,

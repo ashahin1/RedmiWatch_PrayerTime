@@ -10,12 +10,16 @@ const SETTINGS_KEY = 'prayer_app_settings';
 
 export const DEFAULT_SETTINGS = {
   timeFormat: '12h', // '12h' (AM/PM) or '24h'
-  locationMode: 'auto', // 'auto' (GPS) or 'preset'
+  locationMode: 'preset', // 'preset' or 'gps'
   selectedCityId: 'riyadh',
   latitude: DEFAULT_CITY.lat,
   longitude: DEFAULT_CITY.lon,
   timezone: DEFAULT_CITY.timezone !== undefined ? DEFAULT_CITY.timezone : 3,
   cityName: DEFAULT_CITY.name,
+  savedGpsLat: null,
+  savedGpsLon: null,
+  savedGpsTimezone: null,
+  hasSavedGps: false,
   method: DEFAULT_CITY.method, // 'UmmAlQura'
   asrRule: DEFAULT_CITY.asrRule, // 'Standard'
   highLatitudeRule: 'AngleBased',
@@ -50,13 +54,20 @@ export function getStorageItem(key, defaultValue = '') {
       storage.get({
         key,
         default: defaultValue,
-        success: (data) => finish(data || defaultValue),
-        fail: () => finish(defaultValue),
-        complete: () => finish(defaultValue)
+        success: (data) => {
+          finish(data !== undefined && data !== null && data !== '' ? data : defaultValue);
+        },
+        fail: (data, code) => {
+          console.log('[Storage] get fail for key:', key, code);
+          finish(defaultValue);
+        },
+        complete: () => {
+          setTimeout(() => finish(defaultValue), 40);
+        }
       });
-      // Safety fallback in case native callback stalls
-      setTimeout(() => finish(defaultValue), 300);
+      setTimeout(() => finish(defaultValue), 400);
     } catch (e) {
+      console.log('[Storage] get exception:', e);
       finish(defaultValue);
     }
   });
@@ -78,15 +89,22 @@ export function setStorageItem(key, value) {
       }
     };
     try {
+      const strVal = typeof value === 'string' ? value : JSON.stringify(value);
       storage.set({
         key,
-        value: typeof value === 'string' ? value : JSON.stringify(value),
+        value: strVal,
         success: () => finish(true),
-        fail: () => finish(false),
-        complete: () => finish(true)
+        fail: (data, code) => {
+          console.log('[Storage] set fail for key:', key, code);
+          finish(false);
+        },
+        complete: () => {
+          setTimeout(() => finish(true), 40);
+        }
       });
-      setTimeout(() => finish(false), 300);
+      setTimeout(() => finish(false), 400);
     } catch (e) {
+      console.log('[Storage] set exception:', e);
       finish(false);
     }
   });

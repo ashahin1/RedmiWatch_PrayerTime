@@ -37,6 +37,17 @@ export const CITIES = [
     asrRule: 'Standard'
   },
   {
+    id: 'buraydah',
+    name: 'Buraydah',
+    nameAr: 'بريدة',
+    country: 'Saudi Arabia',
+    lat: 26.3260,
+    lon: 43.9750,
+    timezone: 3,
+    method: 'UmmAlQura',
+    asrRule: 'Standard'
+  },
+  {
     id: 'cairo',
     name: 'Cairo',
     nameAr: 'القاهرة',
@@ -44,6 +55,17 @@ export const CITIES = [
     lat: 30.0444,
     lon: 31.2357,
     timezone: 3, // DST handled dynamically
+    method: 'Egypt',
+    asrRule: 'Standard'
+  },
+  {
+    id: 'mit_ghamr',
+    name: 'Mit Ghamr',
+    nameAr: 'ميت غمر',
+    country: 'Egypt',
+    lat: 30.7192,
+    lon: 31.2589,
+    timezone: 3,
     method: 'Egypt',
     asrRule: 'Standard'
   },
