@@ -112,7 +112,7 @@ export class PrayerEngine {
     this.method = options.method || 'UmmAlQura';
     this.asrRule = options.asrRule || 'Standard';
     this.highLatitudeRule = options.highLatitudeRule || 'AngleBased'; // 'NightMiddle', 'OneSeventh', 'AngleBased'
-    this.timeFormat = options.timeFormat || '24h'; // '12h' (AM/PM) or '24h'
+    this.timeFormat = options.timeFormat || '12h'; // '12h' (AM/PM) or '24h'
     this.offsets = Object.assign({
       fajr: 0,
       sunrise: 0,
@@ -191,7 +191,9 @@ export class PrayerEngine {
     const month = date.getMonth() + 1;
     const day = date.getDate();
 
-    const tz = (typeof timezoneOffset === 'number') ? timezoneOffset : -date.getTimezoneOffset() / 60.0;
+    const tz = (typeof timezoneOffset === 'number') 
+      ? timezoneOffset 
+      : (typeof longitude === 'number' ? Math.round(longitude / 15.0) : -date.getTimezoneOffset() / 60.0);
 
     const jd = this.julianDate(year, month, day);
     const sun = this.sunPosition(jd);
@@ -251,15 +253,25 @@ export class PrayerEngine {
       const h = Math.floor(totalMin / 60.0);
       const m = totalMin % 60;
       const pad = (n) => (n < 10 ? '0' : '') + n;
-      const timeStr = `${pad(h)}:${pad(m)}`;
-      const d = new Date(year, month - 1, day, h, m, 0);
+      const time24 = `${pad(h)}:${pad(m)}`;
+      const period = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      const time12 = `${pad(h12)}:${pad(m)} ${period}`;
+      const timeStr = this.timeFormat === '24h' ? time24 : time12;
+
+      // Absolute UTC timestamp independent of device firmware timezone
+      const timestamp = Date.UTC(year, month - 1, day, h, m, 0) - (tz * 3600 * 1000);
+      const d = new Date(timestamp);
 
       return {
         hours: h,
         minutes: m,
+        period,
+        time24,
+        time12,
         timeStr,
         date: d,
-        timestamp: d.getTime()
+        timestamp
       };
     };
 

@@ -8,11 +8,13 @@ import { DEFAULT_CITY } from './cities.js';
 
 const SETTINGS_KEY = 'prayer_app_settings';
 
-export const DEFAULT_SETTINGS = { // '12h' (AM/PM) or '24h'
+export const DEFAULT_SETTINGS = {
+  timeFormat: '12h', // '12h' (AM/PM) or '24h'
   locationMode: 'auto', // 'auto' (GPS) or 'preset'
   selectedCityId: 'riyadh',
   latitude: DEFAULT_CITY.lat,
   longitude: DEFAULT_CITY.lon,
+  timezone: DEFAULT_CITY.timezone !== undefined ? DEFAULT_CITY.timezone : 3,
   cityName: DEFAULT_CITY.name,
   method: DEFAULT_CITY.method, // 'UmmAlQura'
   asrRule: DEFAULT_CITY.asrRule, // 'Standard'

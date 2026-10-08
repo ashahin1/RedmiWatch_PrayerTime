@@ -57,6 +57,16 @@
         <text class="check-mark" if="{{ $item.isSelected }}">✓</text>
       </div>
 
+      <!-- Time Format Section -->
+      <div class="section-box">
+        <text class="section-label">TIME FORMAT</text>
+      </div>
+
+      <div for="{{ timeFormatList }}" class="preset-row {{ $item.isSelected ? 'selected-row' : '' }}" onclick="selectTimeFormat($item.key)">
+        <text class="method-name {{ $item.isSelected ? 'selected-text' : '' }}">{{ $item.name }}</text>
+        <text class="check-mark" if="{{ $item.isSelected }}">✓</text>
+      </div>
+
       <!-- Haptics Toggle Section -->
       <div class="section-box">
         <text class="section-label">HAPTICS & ALERTS</text>

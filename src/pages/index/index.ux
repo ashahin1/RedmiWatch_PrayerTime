@@ -129,13 +129,22 @@ export default {
       asrRule: this.settings.asrRule,
       highLatitudeRule: this.settings.highLatitudeRule,
       offsets: this.settings.offsets,
-      });
+      timeFormat: this.settings.timeFormat || '12h'
+    });
+
+    const tz = (typeof this.settings.timezone === 'number')
+      ? this.settings.timezone
+      : Math.round((this.settings.longitude || 46.6753) / 15.0);
 
     this.schedule = engine.calculate(
       now,
       this.settings.latitude,
-      this.settings.longitude
+      this.settings.longitude,
+      tz,
+      hijri.isRamadan
     );
+
+    console.log(`[PrayerApp] Computed for ${this.cityName} (tz=${tz}): Fajr=${this.schedule.fajr.timeStr}, Dhuhr=${this.schedule.dhuhr.timeStr}, Asr=${this.schedule.asr.timeStr}, Maghrib=${this.schedule.maghrib.timeStr}, Isha=${this.schedule.isha.timeStr}`);
 
     this.updateTick();
   },
@@ -163,7 +172,8 @@ export default {
       asrRule: this.settings.asrRule,
       highLatitudeRule: this.settings.highLatitudeRule,
       offsets: this.settings.offsets,
-      });
+      timeFormat: this.settings.timeFormat || '12h'
+    });
 
     const info = engine.getNextPrayer(this.schedule, now);
 

@@ -118,6 +118,28 @@ const avgUs = (elapsedMs / iterations) * 1000;
 console.log(`  ${iterations} full calculations took ${elapsedMs} ms (Avg: ${avgUs.toFixed(2)} microseconds per calculation)`);
 assert(avgUs < 100, 'Calculation executes in under 100 microseconds per call');
 
+// 8. Test 12h AM/PM vs 24h Time Formatting
+console.log('\nTest 8: 12-Hour (AM/PM) and 24-Hour Time Formatting');
+const engine12h = new PrayerEngine({ method: 'UmmAlQura', timeFormat: '12h' });
+const times12h = engine12h.calculate(testDate, 24.7136, 46.6753, 3);
+console.log(`  12h Fajr:    ${times12h.fajr.timeStr} (period: ${times12h.fajr.period})`);
+console.log(`  12h Dhuhr:   ${times12h.dhuhr.timeStr} (period: ${times12h.dhuhr.period})`);
+console.log(`  12h Asr:     ${times12h.asr.timeStr} (period: ${times12h.asr.period})`);
+console.log(`  12h Maghrib: ${times12h.maghrib.timeStr} (period: ${times12h.maghrib.period})`);
+console.log(`  12h Isha:    ${times12h.isha.timeStr} (period: ${times12h.isha.period})`);
+
+assert(times12h.fajr.timeStr.endsWith(' AM'), 'Fajr formatted with AM');
+assert(times12h.asr.timeStr.endsWith(' PM'), 'Asr formatted with PM');
+assert(times12h.maghrib.timeStr.endsWith(' PM'), 'Maghrib formatted with PM');
+assert(times12h.fajr.period === 'AM', 'Fajr period property is AM');
+assert(times12h.asr.period === 'PM', 'Asr period property is PM');
+
+const engine24h = new PrayerEngine({ method: 'UmmAlQura', timeFormat: '24h' });
+const times24h = engine24h.calculate(testDate, 24.7136, 46.6753, 3);
+console.log(`  24h Asr:     ${times24h.asr.timeStr}`);
+assert(!times24h.asr.timeStr.includes('AM') && !times24h.asr.timeStr.includes('PM'), '24h format contains no AM/PM');
+assert(times24h.asr.timeStr.startsWith('15:'), '24h Asr starts with 15:');
+
 console.log(`\n=== RESULTS: ${passedTests} / ${totalTests} TESTS PASSED ===`);
 if (passedTests === totalTests) {
   console.log('ALL VERIFICATIONS SUCCESSFUL!\n');
