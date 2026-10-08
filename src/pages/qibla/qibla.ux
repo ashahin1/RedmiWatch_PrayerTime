@@ -4,57 +4,74 @@
       <!-- Top Navigation -->
       <div class="nav-row">
         <text class="back-btn" onclick="goBack">◀ Back</text>
-        <text class="nav-title">Qibla</text>
+        <text class="nav-title">Qibla Direction</text>
         <text class="nav-space"></text>
       </div>
 
-      <!-- Bearing Display -->
-      <div class="bearing-box">
-        <text class="bearing-degrees">{{ qiblaBearing }}°</text>
-        <text class="bearing-city">From {{ cityName }} to Kaaba</text>
+      <!-- Hero Bearing Card -->
+      <div class="hero-card">
+        <text class="hero-label">QIBLA BEARING</text>
+        <text class="hero-bearing">{{ qiblaBearing }}°</text>
+        <div class="cardinal-badge">
+          <text class="cardinal-text">{{ cardinalCode }} • {{ cardinalLabel }}</text>
+        </div>
+        <text class="hero-sub">From {{ cityName }} to Holy Kaaba</text>
       </div>
 
-      <!-- Compass Visual Dial -->
-      <div class="compass-wrap">
-        <div class="compass-outer {{ isAligned ? 'compass-aligned' : '' }}">
-          <div class="compass-inner">
-            <!-- Center Direction Arrow / Needle -->
-            <div class="needle-container" style="transform: rotate({{ needleRotation }}deg);">
-              <div class="needle-tip"></div>
-              <div class="needle-shaft"></div>
-              <div class="needle-base"></div>
-            </div>
-            <!-- Kaaba Icon / Symbol -->
-            <text class="kaaba-icon">🕋</text>
-          </div>
+      <!-- Alignment Guide -->
+      <div class="guide-box">
+        <div class="guide-header">
+          <text class="guide-title">ORIENTATION GUIDE</text>
+        </div>
+        <div class="step-row">
+          <text class="step-num">1</text>
+          <text class="step-text">Face True North (0°)</text>
+        </div>
+        <div class="step-row">
+          <text class="step-num">2</text>
+          <text class="step-text">Turn {{ qiblaBearing }}° clockwise (towards {{ cardinalCode }})</text>
+        </div>
+        <div class="step-row">
+          <text class="step-num">3</text>
+          <text class="step-text">You are now facing the Holy Kaaba</text>
         </div>
       </div>
 
-      <!-- Alignment Feedback Status -->
-      <div class="status-wrap">
-        <div class="status-badge {{ isAligned ? 'badge-aligned' : 'badge-normal' }}">
-          <text class="status-text">{{ isAligned ? '✓ Pointing towards Kaaba' : alignmentText }}</text>
+      <!-- 8-Point Compass Reference Grid -->
+      <div class="section-box">
+        <text class="section-title">COMPASS QUADRANT</text>
+      </div>
+
+      <div class="quadrant-grid">
+        <div for="{{ compassPoints }}" class="point-cell {{ $item.isTarget ? 'cell-active' : '' }}">
+          <text class="point-code {{ $item.isTarget ? 'text-active' : '' }}">{{ $item.code }}</text>
+          <text class="point-deg {{ $item.isTarget ? 'text-active-sub' : '' }}">{{ $item.deg }}°</text>
+          <text class="point-badge" if="{{ $item.isTarget }}">★ Qibla</text>
         </div>
       </div>
 
-      <!-- Distance and Coordinates Info -->
-      <div class="info-card">
-        <div class="info-row">
-          <text class="info-label">Distance:</text>
-          <text class="info-val">{{ distanceKm }} km</text>
+      <!-- Details Card -->
+      <div class="details-card">
+        <div class="detail-row">
+          <text class="detail-label">Distance to Kaaba</text>
+          <text class="detail-val">{{ distanceKm }} km</text>
         </div>
-        <div class="info-row">
-          <text class="info-label">Direction:</text>
-          <text class="info-val">{{ qiblaBearing }}° True North</text>
+        <div class="detail-row">
+          <text class="detail-label">Current City</text>
+          <text class="detail-val">{{ cityName }}</text>
         </div>
-        <div class="info-row">
-          <text class="info-label">Sensor:</text>
-          <text class="info-val">{{ compassSupported ? 'Active' : 'Simulated' }}</text>
+        <div class="detail-row">
+          <text class="detail-label">Coordinates</text>
+          <text class="detail-val">{{ coordsStr }}</text>
+        </div>
+        <div class="detail-row">
+          <text class="detail-label">Kaaba Target</text>
+          <text class="detail-val">21.42° N, 39.83° E</text>
         </div>
       </div>
 
       <div class="footer-wrap">
-        <text class="tip-text">Rotate wrist horizontally until the green circle lights up.</text>
+        <text class="footer-note">Calculated via Great-Circle Spherical Trigonometry</text>
       </div>
     </scroll>
   </div>
@@ -62,9 +79,7 @@
 
 <script>
 import router from '@system.router';
-import sensor from '@system.sensor';
-import vibrator from '@system.vibrator';
-import { calculateQiblaDirection, calculateDistanceToKaaba, computeNeedleAngle } from '../../common/qibla.js';
+import { calculateQiblaDirection, calculateDistanceToKaaba, getCardinalDirection } from '../../common/qibla.js';
 import { loadSettings } from '../../common/storage.js';
 
 export default {
@@ -72,11 +87,10 @@ export default {
     cityName: 'Riyadh',
     qiblaBearing: 244,
     distanceKm: 790,
-    needleRotation: 244,
-    isAligned: false,
-    alignmentText: 'Rotate to align',
-    compassSupported: true,
-    hasVibratedOnAlign: false
+    cardinalCode: 'WSW',
+    cardinalLabel: 'West-Southwest',
+    coordsStr: '24.71° N, 46.68° E',
+    compassPoints: []
   },
 
   onInit() {
@@ -85,81 +99,72 @@ export default {
   },
 
   onShow() {
-    this.startCompass();
-  },
-
-  onHide() {
-    this.stopCompass();
-  },
-
-  onDestroy() {
-    this.stopCompass();
+    this.refreshSettings();
   },
 
   initSyncData() {
     const lat = 24.7136;
     const lon = 46.6753;
-    this.qiblaBearing = calculateQiblaDirection(lat, lon);
-    this.distanceKm = calculateDistanceToKaaba(lat, lon);
-    this.needleRotation = this.qiblaBearing;
+    this.applyCoordinates(lat, lon, 'Riyadh');
   },
 
   async refreshSettings() {
     try {
       const settings = await loadSettings();
       if (settings) {
-        this.cityName = settings.cityName || 'Riyadh';
         const lat = settings.latitude || 24.7136;
         const lon = settings.longitude || 46.6753;
-        this.qiblaBearing = calculateQiblaDirection(lat, lon);
-        this.distanceKm = calculateDistanceToKaaba(lat, lon);
-        this.needleRotation = this.qiblaBearing;
+        const name = settings.cityName || 'Riyadh';
+        this.applyCoordinates(lat, lon, name);
       }
     } catch (e) {
       console.log('[Qibla] refreshSettings error:', e);
     }
   },
 
-  startCompass() {
-    try {
-      sensor.subscribeCompass({
-        callback: (res) => {
-          this.compassSupported = true;
-          const angle = computeNeedleAngle(res.direction, this.qiblaBearing);
-          this.needleRotation = angle;
+  applyCoordinates(lat, lon, name) {
+    this.cityName = name;
+    this.qiblaBearing = calculateQiblaDirection(lat, lon);
+    this.distanceKm = calculateDistanceToKaaba(lat, lon);
 
-          const aligned = Math.abs(angle) <= 6;
-          this.isAligned = aligned;
+    const card = getCardinalDirection(this.qiblaBearing);
+    this.cardinalCode = card.code;
+    this.cardinalLabel = card.label;
 
-          if (aligned) {
-            this.alignmentText = 'Aligned!';
-            if (!this.hasVibratedOnAlign) {
-              this.hasVibratedOnAlign = true;
-              try {
-                vibrator.vibrate({ mode: 'short' });
-              } catch (e) {}
-            }
-          } else {
-            this.hasVibratedOnAlign = false;
-            this.alignmentText = angle > 0 ? `Turn right ${Math.abs(angle)}°` : `Turn left ${Math.abs(angle)}°`;
-          }
-        },
-        fail: (data, code) => {
-          console.log('Compass not active or not supported in simulator:', code);
-          this.compassSupported = false;
-        },
-        complete: () => {}
-      });
-    } catch (err) {
-      console.log('Compass subscribe exception:', err);
-      this.compassSupported = false;
-    }
+    const latH = lat >= 0 ? 'N' : 'S';
+    const lonH = lon >= 0 ? 'E' : 'W';
+    this.coordsStr = `${Math.abs(lat).toFixed(2)}° ${latH}, ${Math.abs(lon).toFixed(2)}° ${lonH}`;
+
+    this.buildCompassPoints(this.qiblaBearing);
   },
 
-  stopCompass() {
-    try {
-      sensor.unsubscribeCompass();
-    } catch (e) {}
+  buildCompassPoints(bearing) {
+    const points = [
+      { code: 'N', deg: 0, min: 337.5, max: 22.5 },
+      { code: 'NE', deg: 45, min: 22.5, max: 67.5 },
+      { code: 'E', deg: 90, min: 67.5, max: 112.5 },
+      { code: 'SE', deg: 135, min: 112.5, max: 157.5 },
+      { code: 'S', deg: 180, min: 157.5, max: 202.5 },
+      { code: 'SW', deg: 225, min: 202.5, max: 247.5 },
+      { code: 'W', deg: 270, min: 247.5, max: 292.5 },
+      { code: 'NW', deg: 315, min: 292.5, max: 337.5 }
+    ];
+
+    const norm = (bearing % 360 + 360) % 360;
+
+    this.compassPoints = points.map((p) => {
+      let isTarget = false;
+      if (p.code === 'N') {
+        isTarget = norm >= 337.5 || norm < 22.5;
+      } else {
+        isTarget = norm >= p.min && norm < p.max;
+      }
+      return {
+        code: p.code,
+        deg: p.deg,
+        isTarget
+      };
+    });
   },
 
   goBack() {
@@ -190,7 +195,7 @@ export default {
   width: 100%;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
 }
 
 .back-btn {
@@ -208,160 +213,199 @@ export default {
   width: 60px;
 }
 
-/* Bearing display */
-.bearing-box {
+/* Hero Card */
+.hero-card {
   width: 100%;
+  background-color: #0F172A;
+  border: 2px solid #1E293B;
+  border-radius: 24px;
+  padding: 20px;
   flex-direction: column;
   align-items: center;
-  padding-bottom: 14px;
+  margin-bottom: 14px;
 }
 
-.bearing-degrees {
-  font-size: 48px;
-  color: #34D399;
+.hero-label {
+  font-size: 18px;
+  color: #9CA3AF;
   font-weight: bold;
 }
 
-.bearing-city {
-  font-size: 20px;
-  color: #9CA3AF;
-  margin-top: 2px;
+.hero-bearing {
+  font-size: 58px;
+  color: #34D399;
+  font-weight: bold;
+  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
-/* Compass Dial */
-.compass-wrap {
-  width: 100%;
-  justify-content: center;
-  align-items: center;
-  padding-top: 4px;
-  padding-bottom: 14px;
-}
-
-.compass-outer {
-  width: 250px;
-  height: 250px;
-  border-radius: 125px;
-  background-color: #0F172A;
-  border: 4px solid #1E293B;
-  justify-content: center;
-  align-items: center;
-}
-
-.compass-aligned {
-  border: 4px solid #10B981;
+.cardinal-badge {
   background-color: #064E3B;
+  border: 1px solid #10B981;
+  border-radius: 14px;
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
 }
 
-.compass-inner {
-  width: 220px;
-  height: 220px;
-  border-radius: 110px;
-  background-color: #1E293B;
-  justify-content: center;
-  align-items: center;
-  position: relative;
+.cardinal-text {
+  font-size: 20px;
+  color: #6EE7B7;
+  font-weight: bold;
 }
 
-.needle-container {
-  width: 220px;
-  height: 220px;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
+.hero-sub {
+  font-size: 18px;
+  color: #9CA3AF;
 }
 
-.needle-tip {
-  width: 14px;
-  height: 60px;
-  background-color: #10B981;
-  border-radius: 7px;
-  margin-bottom: 40px;
-}
-
-.needle-shaft {
-  width: 6px;
-  height: 10px;
-  background-color: #6EE7B7;
-}
-
-.needle-base {
-  width: 10px;
-  height: 30px;
-  background-color: #475569;
-  border-radius: 5px;
-}
-
-.kaaba-icon {
-  font-size: 32px;
-  position: absolute;
-}
-
-/* Status badge */
-.status-wrap {
+/* Orientation Guide */
+.guide-box {
   width: 100%;
+  background-color: #111827;
+  border-radius: 20px;
+  padding: 16px;
+  flex-direction: column;
+  margin-bottom: 14px;
+  border: 1px solid #1F2937;
+}
+
+.guide-header {
+  margin-bottom: 10px;
+}
+
+.guide-title {
+  font-size: 18px;
+  color: #6EE7B7;
+  font-weight: bold;
+}
+
+.step-row {
+  width: 100%;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  background-color: #10B981;
+  color: #000000;
+  font-size: 16px;
+  font-weight: bold;
+  text-align: center;
+  margin-right: 12px;
+}
+
+.step-text {
+  font-size: 19px;
+  color: #E5E7EB;
+  flex: 1;
+}
+
+/* Quadrant Grid */
+.section-box {
+  width: 100%;
+  padding-top: 4px;
+  padding-bottom: 8px;
+}
+
+.section-title {
+  font-size: 18px;
+  color: #6B7280;
+  font-weight: bold;
+}
+
+.quadrant-grid {
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.point-cell {
+  width: 48%;
+  height: 70px;
+  border-radius: 16px;
+  background-color: #0F172A;
+  border: 1px solid #1E293B;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding-bottom: 14px;
+  margin-bottom: 10px;
 }
 
-.status-badge {
-  padding-left: 20px;
-  padding-right: 20px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  border-radius: 20px;
+.cell-active {
+  background-color: #064E3B;
+  border: 2px solid #10B981;
 }
 
-.badge-normal {
-  background-color: #1F2937;
-}
-
-.badge-aligned {
-  background-color: #059669;
-}
-
-.status-text {
+.point-code {
   font-size: 22px;
+  color: #D1D5DB;
+  font-weight: bold;
+}
+
+.point-deg {
+  font-size: 16px;
+  color: #6B7280;
+}
+
+.text-active {
   color: #FFFFFF;
   font-weight: bold;
 }
 
-/* Info Card */
-.info-card {
+.text-active-sub {
+  color: #A7F3D0;
+}
+
+.point-badge {
+  font-size: 14px;
+  color: #34D399;
+  font-weight: bold;
+}
+
+/* Details Card */
+.details-card {
   width: 100%;
-  background-color: #111827;
-  border-radius: 18px;
+  background-color: #0F172A;
+  border-radius: 20px;
   padding: 16px;
   flex-direction: column;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  border: 1px solid #1E293B;
 }
 
-.info-row {
+.detail-row {
   width: 100%;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
-.info-label {
-  font-size: 20px;
+.detail-label {
+  font-size: 19px;
   color: #9CA3AF;
 }
 
-.info-val {
-  font-size: 20px;
+.detail-val {
+  font-size: 19px;
   color: #F3F4F6;
   font-weight: bold;
 }
 
 .footer-wrap {
   width: 100%;
-  padding-bottom: 50px;
   justify-content: center;
+  padding-bottom: 50px;
 }
 
-.tip-text {
-  font-size: 18px;
-  color: #6B7280;
+.footer-note {
+  font-size: 16px;
+  color: #4B5563;
   text-align: center;
 }
 </style>

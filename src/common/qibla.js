@@ -66,3 +66,31 @@ export function computeNeedleAngle(deviceDirectionInRadians, qiblaBearingInDegre
 
   return Math.round(relativeAngle);
 }
+
+/**
+ * Get readable cardinal direction string for a bearing
+ * @param {number} bearing In degrees (0-360)
+ * @returns {{ code: string, label: string }}
+ */
+export function getCardinalDirection(bearing) {
+  const points = [
+    { code: 'N', label: 'North' },
+    { code: 'NNE', label: 'North-Northeast' },
+    { code: 'NE', label: 'Northeast' },
+    { code: 'ENE', label: 'East-Northeast' },
+    { code: 'E', label: 'East' },
+    { code: 'ESE', label: 'East-Southeast' },
+    { code: 'SE', label: 'Southeast' },
+    { code: 'SSE', label: 'South-Southeast' },
+    { code: 'S', label: 'South' },
+    { code: 'SSW', label: 'South-Southwest' },
+    { code: 'SW', label: 'Southwest' },
+    { code: 'WSW', label: 'West-Southwest' },
+    { code: 'W', label: 'West' },
+    { code: 'WNW', label: 'West-Northwest' },
+    { code: 'NW', label: 'Northwest' },
+    { code: 'NNW', label: 'North-Northwest' }
+  ];
+  const idx = Math.round((bearing % 360) / 22.5) % 16;
+  return points[idx];
+}

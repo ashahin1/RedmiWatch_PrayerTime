@@ -13,7 +13,6 @@
     { "name": "system.storage" },
     { "name": "system.geolocation" },
     { "name": "system.vibrator" },
-    { "name": "system.sensor" },
     { "name": "system.device" },
     { "name": "system.alarm" },
     { "name": "system.prompt" }
