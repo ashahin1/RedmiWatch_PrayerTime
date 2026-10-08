@@ -1,0 +1,462 @@
+<template>
+  <div class="page">
+    <scroll class="scroll-container" scroll-y="true">
+      <!-- Navigation Header -->
+      <div class="nav-row">
+        <text class="back-btn" onclick="goBack">◀ Back</text>
+        <text class="nav-title">Settings</text>
+        <text class="nav-space"></text>
+      </div>
+
+      <!-- GPS Section -->
+      <div class="section-box">
+        <text class="section-label">LOCATION & GPS</text>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <text class="card-title">Current: {{ currentCityName }}</text>
+        </div>
+        <text class="card-subtitle">{{ currentCoords }}</text>
+        <div class="gps-btn" onclick="acquireGps">
+          <text class="gps-btn-text">{{ gpsBtnText }}</text>
+        </div>
+        <text class="gps-status" if="{{ gpsStatusMsg }}">{{ gpsStatusMsg }}</text>
+      </div>
+
+      <!-- City Presets Section -->
+      <div class="section-box">
+        <text class="section-label">SELECT CITY PRESET</text>
+      </div>
+
+      <div for="{{ cityList }}" class="preset-row {{ $item.isSelected ? 'selected-row' : '' }}" onclick="selectCity($item)">
+        <div class="city-info">
+          <text class="city-name {{ $item.isSelected ? 'selected-text' : '' }}">{{ $item.name }}</text>
+          <text class="city-country">{{ $item.country }}</text>
+        </div>
+        <text class="check-mark" if="{{ $item.isSelected }}">✓</text>
+      </div>
+
+      <!-- Calculation Method Section -->
+      <div class="section-box">
+        <text class="section-label">CALCULATION METHOD</text>
+      </div>
+
+      <div for="{{ methodList }}" class="preset-row {{ $item.isSelected ? 'selected-row' : '' }}" onclick="selectMethod($item.key)">
+        <text class="method-name {{ $item.isSelected ? 'selected-text' : '' }}">{{ $item.name }}</text>
+        <text class="check-mark" if="{{ $item.isSelected }}">✓</text>
+      </div>
+
+      <!-- Asr Juristic Rule Section -->
+      <div class="section-box">
+        <text class="section-label">ASR JURISTIC RULE</text>
+      </div>
+
+      <div for="{{ asrList }}" class="preset-row {{ $item.isSelected ? 'selected-row' : '' }}" onclick="selectAsr($item.key)">
+        <text class="method-name {{ $item.isSelected ? 'selected-text' : '' }}">{{ $item.name }}</text>
+        <text class="check-mark" if="{{ $item.isSelected }}">✓</text>
+      </div>
+
+      <!-- Haptics Toggle Section -->
+      <div class="section-box">
+        <text class="section-label">HAPTICS & ALERTS</text>
+      </div>
+
+      <div class="toggle-row" onclick="toggleVibrate">
+        <text class="toggle-label">Vibrate on Adhan</text>
+        <div class="toggle-pill {{ vibrateOnAdhan ? 'pill-on' : 'pill-off' }}">
+          <text class="pill-text">{{ vibrateOnAdhan ? 'ON' : 'OFF' }}</text>
+        </div>
+      </div>
+
+      <div class="footer-wrap">
+        <text class="footer-info">Redmi Watch 6 • Prayer Times v1.0.0</text>
+      </div>
+    </scroll>
+  </div>
+</template>
+
+<script>
+import router from '@system.router';
+import geolocation from '@system.geolocation';
+import vibrator from '@system.vibrator';
+import { CITIES } from '../../common/cities.js';
+import { loadSettings, saveSettings, DEFAULT_SETTINGS } from '../../common/storage.js';
+
+export default {
+  data: {
+    settings: null,
+    currentCityName: 'Riyadh',
+    currentCoords: '24.71° N, 46.68° E',
+    gpsBtnText: '📡 Sync Current GPS Location',
+    gpsStatusMsg: '',
+    vibrateOnAdhan: true,
+    cityList: [],
+    methodList: [],
+    asrList: [],
+    timeFormatList: []
+  },
+
+  onInit() {
+    this.initSyncUI();
+    this.refreshUI();
+  },
+
+  initSyncUI() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    this.updateLists();
+  },
+
+  async refreshUI() {
+    try {
+      const loaded = await loadSettings();
+      if (loaded) {
+        this.settings = loaded;
+      }
+    } catch (e) {
+      console.log('[Settings] refreshUI load error:', e);
+    }
+    this.updateLists();
+  },
+
+  updateLists() {
+    if (!this.settings) return;
+    this.currentCityName = this.settings.cityName || 'Riyadh';
+    this.currentCoords = `${this.settings.latitude.toFixed(2)}° N, ${this.settings.longitude.toFixed(2)}° E`;
+    this.vibrateOnAdhan = !!this.settings.vibrateOnAdhan;
+
+    // Build time format options
+    const timeFormats = [
+      { key: '12h', name: '12-Hour (e.g. 03:04 PM)' },
+      { key: '24h', name: '24-Hour (e.g. 15:04)' }
+    ];
+    this.timeFormatList = timeFormats.map(tf => ({
+      ...tf,
+      isSelected: tf.key === (this.settings.timeFormat || '12h')
+    }));
+
+    // Build city options
+    this.cityList = CITIES.map(c => ({
+      ...c,
+      isSelected: (c.name.toLowerCase() === this.currentCityName.toLowerCase() || c.id === this.settings.selectedCityId)
+    }));
+
+    // Build calculation method options
+    const methods = [
+      { key: 'UmmAlQura', name: 'Umm al-Qura (Makkah)' },
+      { key: 'MWL', name: 'Muslim World League' },
+      { key: 'Egypt', name: 'Egyptian General Authority' },
+      { key: 'Karachi', name: 'Karachi (Hanafi)' },
+      { key: 'Dubai', name: 'Dubai / UAE' },
+      { key: 'ISNA', name: 'ISNA (North America)' }
+    ];
+    this.methodList = methods.map(m => ({
+      ...m,
+      isSelected: m.key === this.settings.method
+    }));
+
+    // Build Asr options
+    const asrOptions = [
+      { key: 'Standard', name: 'Standard (Shafi\'i/Maliki/Hanbali)' },
+      { key: 'Hanafi', name: 'Hanafi' }
+    ];
+    this.asrList = asrOptions.map(a => ({
+      ...a,
+      isSelected: a.key === this.settings.asrRule
+    }));
+  },
+
+  async selectTimeFormat(formatKey) {
+    this.settings.timeFormat = formatKey;
+    await saveSettings(this.settings);
+    this.updateLists();
+
+    try {
+      vibrator.vibrate({ mode: 'short' });
+    } catch (e) {}
+  },
+
+  async selectCity(city) {
+    this.settings.cityName = city.name;
+    this.settings.selectedCityId = city.id;
+    this.settings.latitude = city.lat;
+    this.settings.longitude = city.lon;
+    this.settings.timezone = city.timezone !== undefined ? city.timezone : Math.round(city.lon / 15.0);
+    this.settings.method = city.method;
+    this.settings.asrRule = city.asrRule;
+    this.settings.locationMode = 'preset';
+
+    await saveSettings(this.settings);
+    this.updateLists();
+
+    try {
+      vibrator.vibrate({ mode: 'short' });
+    } catch (e) {}
+  },
+
+  async selectMethod(methodKey) {
+    this.settings.method = methodKey;
+    await saveSettings(this.settings);
+    this.updateLists();
+
+    try {
+      vibrator.vibrate({ mode: 'short' });
+    } catch (e) {}
+  },
+
+  async selectAsr(asrKey) {
+    this.settings.asrRule = asrKey;
+    await saveSettings(this.settings);
+    this.updateLists();
+
+    try {
+      vibrator.vibrate({ mode: 'short' });
+    } catch (e) {}
+  },
+
+  async toggleVibrate() {
+    this.vibrateOnAdhan = !this.vibrateOnAdhan;
+    this.settings.vibrateOnAdhan = this.vibrateOnAdhan;
+    await saveSettings(this.settings);
+
+    try {
+      vibrator.vibrate({ mode: 'short' });
+    } catch (e) {}
+  },
+
+  acquireGps() {
+    this.gpsBtnText = 'Locating GPS...';
+    this.gpsStatusMsg = 'Searching for satellite fix...';
+
+    try {
+      geolocation.getLocation({
+        timeout: 20000,
+        success: async (data) => {
+          this.settings.latitude = data.latitude;
+          this.settings.longitude = data.longitude;
+          this.settings.timezone = Math.round(data.longitude / 15.0);
+          this.settings.cityName = 'GPS Location';
+          this.settings.locationMode = 'auto';
+
+          await saveSettings(this.settings);
+          this.gpsBtnText = '📡 Sync Current GPS Location';
+          this.gpsStatusMsg = `✓ GPS Locked (${data.latitude.toFixed(2)}°, ${data.longitude.toFixed(2)}°)`;
+          this.updateLists();
+
+          try {
+            vibrator.vibrate({ mode: 'short' });
+          } catch (e) {}
+        },
+        fail: (data, code) => {
+          this.gpsBtnText = '📡 Sync Current GPS Location';
+          this.gpsStatusMsg = `GPS unavailable (${code}). Using preset.`;
+        },
+        complete: () => {}
+      });
+    } catch (err) {
+      this.gpsBtnText = '📡 Sync Current GPS Location';
+      this.gpsStatusMsg = 'GPS service not available in emulator.';
+    }
+  },
+
+  goBack() {
+    router.back();
+  }
+};
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  background-color: #000000;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+}
+
+.scroll-container {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  padding-left: 36px;
+  padding-right: 36px;
+  padding-top: 36px;
+}
+
+.nav-row {
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+}
+
+.back-btn {
+  font-size: 24px;
+  color: #10B981;
+}
+
+.nav-title {
+  font-size: 26px;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.nav-space {
+  width: 60px;
+}
+
+.section-box {
+  width: 100%;
+  padding-top: 14px;
+  padding-bottom: 8px;
+}
+
+.section-label {
+  font-size: 20px;
+  color: #6B7280;
+  font-weight: bold;
+}
+
+.card {
+  width: 100%;
+  background-color: #111827;
+  border-radius: 20px;
+  padding: 16px;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+
+.card-title {
+  font-size: 24px;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.card-subtitle {
+  font-size: 20px;
+  color: #9CA3AF;
+  margin-top: 4px;
+  margin-bottom: 12px;
+}
+
+.gps-btn {
+  width: 100%;
+  height: 56px;
+  border-radius: 16px;
+  background-color: #10B981;
+  justify-content: center;
+  align-items: center;
+}
+
+.gps-btn-text {
+  color: #FFFFFF;
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.gps-status {
+  font-size: 18px;
+  color: #34D399;
+  margin-top: 8px;
+  text-align: center;
+}
+
+.preset-row {
+  width: 100%;
+  padding-left: 18px;
+  padding-right: 18px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 6px;
+  background-color: #0F172A;
+  border-radius: 16px;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid #1E293B;
+}
+
+.selected-row {
+  border: 2px solid #10B981;
+  background-color: #064E3B;
+}
+
+.city-info {
+  flex-direction: column;
+}
+
+.city-name {
+  font-size: 24px;
+  color: #E2E8F0;
+}
+
+.city-country {
+  font-size: 18px;
+  color: #64748B;
+  margin-top: 2px;
+}
+
+.method-name {
+  font-size: 22px;
+  color: #E2E8F0;
+}
+
+.selected-text {
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.check-mark {
+  font-size: 24px;
+  color: #34D399;
+  font-weight: bold;
+}
+
+.toggle-row {
+  width: 100%;
+  background-color: #111827;
+  border-radius: 16px;
+  padding: 16px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.toggle-label {
+  font-size: 22px;
+  color: #E2E8F0;
+}
+
+.toggle-pill {
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-radius: 14px;
+}
+
+.pill-on {
+  background-color: #10B981;
+}
+
+.pill-off {
+  background-color: #4B5563;
+}
+
+.pill-text {
+  font-size: 18px;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.footer-wrap {
+  width: 100%;
+  justify-content: center;
+  padding-top: 20px;
+  padding-bottom: 60px;
+}
+
+.footer-info {
+  font-size: 18px;
+  color: #4B5563;
+}
+</style>

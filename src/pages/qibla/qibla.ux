@@ -1,0 +1,367 @@
+<template>
+  <div class="page">
+    <scroll class="scroll-container" scroll-y="true">
+      <!-- Top Navigation -->
+      <div class="nav-row">
+        <text class="back-btn" onclick="goBack">◀ Back</text>
+        <text class="nav-title">Qibla</text>
+        <text class="nav-space"></text>
+      </div>
+
+      <!-- Bearing Display -->
+      <div class="bearing-box">
+        <text class="bearing-degrees">{{ qiblaBearing }}°</text>
+        <text class="bearing-city">From {{ cityName }} to Kaaba</text>
+      </div>
+
+      <!-- Compass Visual Dial -->
+      <div class="compass-wrap">
+        <div class="compass-outer {{ isAligned ? 'compass-aligned' : '' }}">
+          <div class="compass-inner">
+            <!-- Center Direction Arrow / Needle -->
+            <div class="needle-container" style="transform: rotate({{ needleRotation }}deg);">
+              <div class="needle-tip"></div>
+              <div class="needle-shaft"></div>
+              <div class="needle-base"></div>
+            </div>
+            <!-- Kaaba Icon / Symbol -->
+            <text class="kaaba-icon">🕋</text>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alignment Feedback Status -->
+      <div class="status-wrap">
+        <div class="status-badge {{ isAligned ? 'badge-aligned' : 'badge-normal' }}">
+          <text class="status-text">{{ isAligned ? '✓ Pointing towards Kaaba' : alignmentText }}</text>
+        </div>
+      </div>
+
+      <!-- Distance and Coordinates Info -->
+      <div class="info-card">
+        <div class="info-row">
+          <text class="info-label">Distance:</text>
+          <text class="info-val">{{ distanceKm }} km</text>
+        </div>
+        <div class="info-row">
+          <text class="info-label">Direction:</text>
+          <text class="info-val">{{ qiblaBearing }}° True North</text>
+        </div>
+        <div class="info-row">
+          <text class="info-label">Sensor:</text>
+          <text class="info-val">{{ compassSupported ? 'Active' : 'Simulated' }}</text>
+        </div>
+      </div>
+
+      <div class="footer-wrap">
+        <text class="tip-text">Rotate wrist horizontally until the green circle lights up.</text>
+      </div>
+    </scroll>
+  </div>
+</template>
+
+<script>
+import router from '@system.router';
+import sensor from '@system.sensor';
+import vibrator from '@system.vibrator';
+import { calculateQiblaDirection, calculateDistanceToKaaba, computeNeedleAngle } from '../../common/qibla.js';
+import { loadSettings } from '../../common/storage.js';
+
+export default {
+  data: {
+    cityName: 'Riyadh',
+    qiblaBearing: 244,
+    distanceKm: 790,
+    needleRotation: 244,
+    isAligned: false,
+    alignmentText: 'Rotate to align',
+    compassSupported: true,
+    hasVibratedOnAlign: false
+  },
+
+  onInit() {
+    this.initSyncData();
+    this.refreshSettings();
+  },
+
+  onShow() {
+    this.startCompass();
+  },
+
+  onHide() {
+    this.stopCompass();
+  },
+
+  onDestroy() {
+    this.stopCompass();
+  },
+
+  initSyncData() {
+    const lat = 24.7136;
+    const lon = 46.6753;
+    this.qiblaBearing = calculateQiblaDirection(lat, lon);
+    this.distanceKm = calculateDistanceToKaaba(lat, lon);
+    this.needleRotation = this.qiblaBearing;
+  },
+
+  async refreshSettings() {
+    try {
+      const settings = await loadSettings();
+      if (settings) {
+        this.cityName = settings.cityName || 'Riyadh';
+        const lat = settings.latitude || 24.7136;
+        const lon = settings.longitude || 46.6753;
+        this.qiblaBearing = calculateQiblaDirection(lat, lon);
+        this.distanceKm = calculateDistanceToKaaba(lat, lon);
+        this.needleRotation = this.qiblaBearing;
+      }
+    } catch (e) {
+      console.log('[Qibla] refreshSettings error:', e);
+    }
+  },
+
+  startCompass() {
+    try {
+      sensor.subscribeCompass({
+        callback: (res) => {
+          this.compassSupported = true;
+          const angle = computeNeedleAngle(res.direction, this.qiblaBearing);
+          this.needleRotation = angle;
+
+          const aligned = Math.abs(angle) <= 6;
+          this.isAligned = aligned;
+
+          if (aligned) {
+            this.alignmentText = 'Aligned!';
+            if (!this.hasVibratedOnAlign) {
+              this.hasVibratedOnAlign = true;
+              try {
+                vibrator.vibrate({ mode: 'short' });
+              } catch (e) {}
+            }
+          } else {
+            this.hasVibratedOnAlign = false;
+            this.alignmentText = angle > 0 ? `Turn right ${Math.abs(angle)}°` : `Turn left ${Math.abs(angle)}°`;
+          }
+        },
+        fail: (data, code) => {
+          console.log('Compass not active or not supported in simulator:', code);
+          this.compassSupported = false;
+        },
+        complete: () => {}
+      });
+    } catch (err) {
+      console.log('Compass subscribe exception:', err);
+      this.compassSupported = false;
+    }
+  },
+
+  stopCompass() {
+    try {
+      sensor.unsubscribeCompass();
+    } catch (e) {}
+  },
+
+  goBack() {
+    router.back();
+  }
+};
+</script>
+
+<style>
+.page {
+  flex-direction: column;
+  background-color: #000000;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+}
+
+.scroll-container {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  padding-left: 36px;
+  padding-right: 36px;
+  padding-top: 36px;
+}
+
+.nav-row {
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+}
+
+.back-btn {
+  font-size: 24px;
+  color: #10B981;
+}
+
+.nav-title {
+  font-size: 26px;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+.nav-space {
+  width: 60px;
+}
+
+/* Bearing display */
+.bearing-box {
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  padding-bottom: 14px;
+}
+
+.bearing-degrees {
+  font-size: 48px;
+  color: #34D399;
+  font-weight: bold;
+}
+
+.bearing-city {
+  font-size: 20px;
+  color: #9CA3AF;
+  margin-top: 2px;
+}
+
+/* Compass Dial */
+.compass-wrap {
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+  padding-top: 4px;
+  padding-bottom: 14px;
+}
+
+.compass-outer {
+  width: 250px;
+  height: 250px;
+  border-radius: 125px;
+  background-color: #0F172A;
+  border: 4px solid #1E293B;
+  justify-content: center;
+  align-items: center;
+}
+
+.compass-aligned {
+  border: 4px solid #10B981;
+  background-color: #064E3B;
+}
+
+.compass-inner {
+  width: 220px;
+  height: 220px;
+  border-radius: 110px;
+  background-color: #1E293B;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.needle-container {
+  width: 220px;
+  height: 220px;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.needle-tip {
+  width: 14px;
+  height: 60px;
+  background-color: #10B981;
+  border-radius: 7px;
+  margin-bottom: 40px;
+}
+
+.needle-shaft {
+  width: 6px;
+  height: 10px;
+  background-color: #6EE7B7;
+}
+
+.needle-base {
+  width: 10px;
+  height: 30px;
+  background-color: #475569;
+  border-radius: 5px;
+}
+
+.kaaba-icon {
+  font-size: 32px;
+  position: absolute;
+}
+
+/* Status badge */
+.status-wrap {
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+  padding-bottom: 14px;
+}
+
+.status-badge {
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-radius: 20px;
+}
+
+.badge-normal {
+  background-color: #1F2937;
+}
+
+.badge-aligned {
+  background-color: #059669;
+}
+
+.status-text {
+  font-size: 22px;
+  color: #FFFFFF;
+  font-weight: bold;
+}
+
+/* Info Card */
+.info-card {
+  width: 100%;
+  background-color: #111827;
+  border-radius: 18px;
+  padding: 16px;
+  flex-direction: column;
+  margin-bottom: 14px;
+}
+
+.info-row {
+  width: 100%;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.info-label {
+  font-size: 20px;
+  color: #9CA3AF;
+}
+
+.info-val {
+  font-size: 20px;
+  color: #F3F4F6;
+  font-weight: bold;
+}
+
+.footer-wrap {
+  width: 100%;
+  padding-bottom: 50px;
+  justify-content: center;
+}
+
+.tip-text {
+  font-size: 18px;
+  color: #6B7280;
+  text-align: center;
+}
+</style>
