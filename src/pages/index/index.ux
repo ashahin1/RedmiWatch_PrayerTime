@@ -60,11 +60,11 @@ import router from '@system.router';
 import vibrator from '@system.vibrator';
 import { PrayerEngine } from '../../common/prayer-engine.js';
 import { getHijriDate } from '../../common/hijri.js';
-import { loadSettings, DEFAULT_SETTINGS } from '../../common/storage.js';
+import { loadSettings, getCachedSettings } from '../../common/storage.js';
 
 export default {
   data: {
-    cityName: 'Riyadh',
+    cityName: '--',
     hijriDateStr: '',
     nextPrayerName: '--',
     nextPrayerTime: '--:--',
@@ -75,13 +75,13 @@ export default {
     settings: null,
     schedule: null,
     lastAlertedPrayer: '',
-    lastCalculatedDate: null
+    lastCalculatedDate: null,
+    isRefreshing: false
   },
 
   onInit() {
     console.log('[PrayerApp] index.ux onInit starting');
     this.initSynchronousData();
-    this.refreshAll();
   },
 
   onShow() {
@@ -99,22 +99,27 @@ export default {
   },
 
   initSynchronousData() {
-    if (!this.settings) {
-      this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    const cached = getCachedSettings();
+    if (cached) {
+      this.settings = cached;
+      this.computeAndApplySchedule();
     }
-    this.computeAndApplySchedule();
   },
 
   async refreshAll() {
+    if (this.isRefreshing) return;
+    this.isRefreshing = true;
     try {
       const loaded = await loadSettings();
       if (loaded) {
         this.settings = loaded;
+        this.computeAndApplySchedule();
       }
     } catch (e) {
       console.log('[PrayerApp] loadSettings error:', e);
+    } finally {
+      this.isRefreshing = false;
     }
-    this.computeAndApplySchedule();
   },
 
   computeAndApplySchedule() {

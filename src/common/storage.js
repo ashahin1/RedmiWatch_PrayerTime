@@ -35,6 +35,17 @@ export const DEFAULT_SETTINGS = {
   }
 };
 
+let cachedSettings = null;
+let activeLoadPromise = null;
+
+/**
+ * Get in-memory cached settings synchronously if available
+ * @returns {Object|null}
+ */
+export function getCachedSettings() {
+  return cachedSettings;
+}
+
 /**
  * Get item from storage
  * @param {string} key 
@@ -60,12 +71,10 @@ export function getStorageItem(key, defaultValue = '') {
         fail: (data, code) => {
           console.log('[Storage] get fail for key:', key, code);
           finish(defaultValue);
-        },
-        complete: () => {
-          setTimeout(() => finish(defaultValue), 40);
         }
       });
-      setTimeout(() => finish(defaultValue), 400);
+      // Safety timeout in case native bridge hangs
+      setTimeout(() => finish(defaultValue), 1500);
     } catch (e) {
       console.log('[Storage] get exception:', e);
       finish(defaultValue);
@@ -97,12 +106,9 @@ export function setStorageItem(key, value) {
         fail: (data, code) => {
           console.log('[Storage] set fail for key:', key, code);
           finish(false);
-        },
-        complete: () => {
-          setTimeout(() => finish(true), 40);
         }
       });
-      setTimeout(() => finish(false), 400);
+      setTimeout(() => finish(false), 1500);
     } catch (e) {
       console.log('[Storage] set exception:', e);
       finish(false);
@@ -111,19 +117,42 @@ export function setStorageItem(key, value) {
 }
 
 /**
- * Load user settings with fallback defaults
+ * Load user settings with fallback defaults and single-flight deduplication
  * @returns {Promise<Object>}
  */
 export async function loadSettings() {
-  try {
-    const raw = await getStorageItem(SETTINGS_KEY, '');
-    if (!raw) return Object.assign({}, DEFAULT_SETTINGS);
-    const parsed = JSON.parse(raw);
-    return Object.assign({}, DEFAULT_SETTINGS, parsed);
-  } catch (err) {
-    console.error('Error loading settings:', err);
-    return Object.assign({}, DEFAULT_SETTINGS);
+  if (activeLoadPromise) {
+    return activeLoadPromise;
   }
+
+  activeLoadPromise = (async () => {
+    try {
+      const raw = await getStorageItem(SETTINGS_KEY, '');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          cachedSettings = Object.assign({}, DEFAULT_SETTINGS, parsed);
+          return cachedSettings;
+        }
+      }
+      // If disk read returned empty, but we already have valid settings in memory: preserve them!
+      if (cachedSettings && cachedSettings.cityName) {
+        return cachedSettings;
+      }
+      cachedSettings = Object.assign({}, DEFAULT_SETTINGS);
+      return cachedSettings;
+    } catch (err) {
+      console.error('[Storage] Error loading settings:', err);
+      if (cachedSettings && cachedSettings.cityName) {
+        return cachedSettings;
+      }
+      return Object.assign({}, DEFAULT_SETTINGS);
+    } finally {
+      activeLoadPromise = null;
+    }
+  })();
+
+  return activeLoadPromise;
 }
 
 /**
@@ -133,9 +162,10 @@ export async function loadSettings() {
  */
 export async function saveSettings(settings) {
   try {
+    cachedSettings = Object.assign({}, settings);
     return await setStorageItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (err) {
-    console.error('Error saving settings:', err);
+    console.error('[Storage] Error saving settings:', err);
     return false;
   }
 }

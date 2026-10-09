@@ -80,22 +80,21 @@
 <script>
 import router from '@system.router';
 import { calculateQiblaDirection, calculateDistanceToKaaba, getCardinalDirection } from '../../common/qibla.js';
-import { loadSettings } from '../../common/storage.js';
+import { loadSettings, getCachedSettings } from '../../common/storage.js';
 
 export default {
   data: {
-    cityName: 'Riyadh',
-    qiblaBearing: 244,
-    distanceKm: 790,
-    cardinalCode: 'WSW',
-    cardinalLabel: 'West-Southwest',
-    coordsStr: '24.71° N, 46.68° E',
+    cityName: '--',
+    qiblaBearing: 0,
+    distanceKm: 0,
+    cardinalCode: '--',
+    cardinalLabel: '--',
+    coordsStr: '--',
     compassPoints: []
   },
 
   onInit() {
     this.initSyncData();
-    this.refreshSettings();
   },
 
   onShow() {
@@ -103,9 +102,10 @@ export default {
   },
 
   initSyncData() {
-    const lat = 24.7136;
-    const lon = 46.6753;
-    this.applyCoordinates(lat, lon, 'Riyadh');
+    const cached = getCachedSettings();
+    if (cached) {
+      this.applyCoordinates(cached.latitude, cached.longitude, cached.cityName);
+    }
   },
 
   async refreshSettings() {

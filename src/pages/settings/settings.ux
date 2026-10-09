@@ -94,13 +94,13 @@ import router from '@system.router';
 import geolocation from '@system.geolocation';
 import vibrator from '@system.vibrator';
 import { CITIES } from '../../common/cities.js';
-import { loadSettings, saveSettings, DEFAULT_SETTINGS } from '../../common/storage.js';
+import { loadSettings, saveSettings, getCachedSettings, DEFAULT_SETTINGS } from '../../common/storage.js';
 
 export default {
   data: {
     settings: null,
-    currentCityName: 'Riyadh',
-    currentCoords: '24.71° N, 46.68° E',
+    currentCityName: '--',
+    currentCoords: '--',
     gpsBtnText: '📡 Sync Current GPS Location',
     gpsStatusMsg: '',
     hasSavedGps: false,
@@ -119,7 +119,8 @@ export default {
   },
 
   initSyncUI() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    const cached = getCachedSettings();
+    this.settings = cached ? Object.assign({}, cached) : Object.assign({}, DEFAULT_SETTINGS);
     this.updateLists();
   },
 
